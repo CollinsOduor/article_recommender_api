@@ -283,7 +283,9 @@ def _profile_vector(
     profile: UserProfile,
     recommendation_time: datetime,
 ) -> np.ndarray:
-    profile_frame = pd.DataFrame([profile.model_dump()])
+    profile_frame = pd.DataFrame([
+        {key: np.nan if value is None else value for key, value in profile.model_dump().items()}
+    ])
     transformed = resources.preprocessor.transform(profile_frame)
     if hasattr(transformed, "toarray"):
         transformed = transformed.toarray()

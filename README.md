@@ -50,6 +50,7 @@ the reverse index is supported by deriving it from `article_titles`.
 ## Recommend
 
 `POST /recommend` expects at least the model's five prior interactions, oldest first. The request may include more; only the latest five are used. `page_section` can be a raw section from the notebook's taxonomy or an already-normalized section. The recommendation timestamp must include a timezone offset because its local weekday and hour are model features.
+Profile fields may be omitted or set to `null`; the saved preprocessor imputes missing values using its fitted settings.
 The exported taxonomy includes both HTML-escaped and decoded aliases, such as
 `Life &amp; Style` and `Life & Style`.
 
