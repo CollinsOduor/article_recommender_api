@@ -96,6 +96,7 @@ class RecommenderResources:
     article_to_index: dict[str, int]
     index_to_article: dict[int, str]
     article_titles: dict[str, str | None]
+    title_to_article_ids: dict[str, list[str]]
     section_to_index: dict[str, int]
     section_mapping: dict[str, str]
     look_back: int
@@ -148,6 +149,19 @@ def load_resources() -> RecommenderResources:
     if sorted(section_to_index.values()) != list(range(len(section_to_index))):
         raise ValueError("section_to_index must contain contiguous indices starting at zero")
 
+    article_titles = {
+        str(article_id): (str(title) if title is not None else None)
+        for article_id, title in metadata["article_titles"].items()
+    }
+    title_to_article_ids: dict[str, list[str]] = {}
+    for article_id, title in article_titles.items():
+        if title:
+            title_to_article_ids.setdefault(title, []).append(article_id)
+    if "title_to_article_ids" in metadata:
+        if metadata["title_to_article_ids"] != title_to_article_ids:
+            raise ValueError("Saved title-to-article mapping does not match article_titles")
+        title_to_article_ids = metadata["title_to_article_ids"]
+
     preprocessor = joblib.load(preprocessor_path)
     profile_cols = list(metadata["profile_cols"])
     expected_profile_cols = list(preprocessor.get_feature_names_out()) + list(TIME_FEATURES)
@@ -174,10 +188,8 @@ def load_resources() -> RecommenderResources:
         preprocessor=preprocessor,
         article_to_index=article_to_index,
         index_to_article={index: article_id for article_id, index in article_to_index.items()},
-        article_titles={
-            str(article_id): (str(title) if title is not None else None)
-            for article_id, title in metadata["article_titles"].items()
-        },
+        article_titles=article_titles,
+        title_to_article_ids=title_to_article_ids,
         section_to_index=section_to_index,
         section_mapping={
             str(section): str(mapped_section)
@@ -322,10 +334,10 @@ def search_articles(
 
     matches = [
         ArticleSearchResult(article_id=article_id, title=title)
-        for article_id, title in resources.article_titles.items()
-        if title
-        and article_id in resources.article_to_index
-        and query in title.casefold()
+        for title, article_ids in resources.title_to_article_ids.items()
+        if query in title.casefold()
+        for article_id in article_ids
+        if article_id in resources.article_to_index
     ]
     matches.sort(
         key=lambda article: (

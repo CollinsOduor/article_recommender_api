@@ -12,11 +12,12 @@ Run the article-level notebook through its model-save cell. It should produce:
 
 Copy those files into this folder's `artifacts/` directory, or set `MODEL_ARTIFACTS_DIR` to their directory. The API reports `503 not_ready` until the artifacts are present. The notebook's exporter uses a picklable boolean transformer and records the section aliases required by the API; rerun the notebook's save cell after those notebook changes.
 
-The joblib preprocessor is a pickle-based artifact. Load only model artifacts you trust.
+The joblib preprocessor is a pickle-based artifact and may require `dill` to load.
+Load only model artifacts you trust.
 
 ## Install and run
 
-Use the same TensorFlow, scikit-learn, and NumPy versions used to train the model; the notebook records these in the metadata.
+Use the same TensorFlow, scikit-learn, and NumPy versions used to train the model; newer notebook exports record these in the metadata. The requirements pin scikit-learn to 1.6.1 for the supplied preprocessor; update the pin if you export an artifact with a different version.
 Use a Python release supported by that TensorFlow version.
 
 ```bash
@@ -29,15 +30,28 @@ uvicorn app:app --host 127.0.0.1 --port 8000
 
 Open `/docs` for the interactive OpenAPI page. `GET /health` reports whether model artifacts loaded.
 
+For Docker, rebuild the image after changing dependencies so the container receives
+the updated packages:
+
+```bash
+docker build -t article-recommender-api .
+docker run --rm -p 8000:8000 article-recommender-api
+```
+
 ## Find articles by title
 
 `GET /articles/search?q=climate&limit=8` performs a case-insensitive title
 search against the saved catalog and returns matching model article IDs. Only
-articles supported by the loaded model are included.
+articles supported by the loaded model are included. The notebook exports both
+`article_titles` (ID to title) and `title_to_article_ids` (title to a list of IDs),
+so articles sharing a title remain separate search results. Older metadata without
+the reverse index is supported by deriving it from `article_titles`.
 
 ## Recommend
 
 `POST /recommend` expects at least the model's five prior interactions, oldest first. The request may include more; only the latest five are used. `page_section` can be a raw section from the notebook's taxonomy or an already-normalized section. The recommendation timestamp must include a timezone offset because its local weekday and hour are model features.
+The exported taxonomy includes both HTML-escaped and decoded aliases, such as
+`Life &amp; Style` and `Life & Style`.
 
 ```json
 {
@@ -63,6 +77,9 @@ articles supported by the loaded model are included.
 
 The response contains ranked article IDs, saved titles where available, model scores, and the number of eligible candidates. Recommendations are limited to article IDs observed as training targets; this model does not provide cold-start recommendations for new articles.
 
-## Local validation status
+## Artifact compatibility
 
-The notebook's model artifacts are not included here, so model startup and real inference require running the notebook and copying its outputs. The API source can be syntax-checked independently of the trained model.
+The supplied artifacts predate the current exporter: their metadata lacks
+`section_mapping`, and their preprocessor contains a serialized lambda that fails
+when transformed in the Python 3.11 container. Regenerate all three artifacts by
+running the current notebook before starting the API.
